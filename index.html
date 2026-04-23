@@ -11,7 +11,6 @@
             margin: 0;
             padding: 20px 0;
             user-select: none;
-            touch-action: none;
             text-align: center;
         }
         canvas {
@@ -767,14 +766,34 @@ canvas.addEventListener('mouseup', async (e) => {
     isAnimating = false; 
 });
 
+// 手機觸控支援與滾動修正
 canvas.addEventListener('touchstart', (e) => {
-    e.preventDefault();
+    // 計算點擊位置
+    const rect = canvas.getBoundingClientRect();
+    const scaleY = canvas.height / rect.height;
+    const my = (e.touches[0].clientY - rect.top) * scaleY;
+
+    // 如果點擊在上方遊戲盤面區域，才阻止網頁預設滾動行為（避免轉珠時網頁跟著滑動）
+    if (typeof UI_Y !== 'undefined' && my < UI_Y) {
+        e.preventDefault();
+    }
+
     let touch = e.touches[0];
     canvas.dispatchEvent(new MouseEvent('mousedown', { clientX: touch.clientX, clientY: touch.clientY }));
 }, {passive: false});
 
+// 確保在拖曳珠子時，畫面絕對不會跟著滾動
+canvas.addEventListener('touchmove', (e) => {
+    if (dragStart) {
+        e.preventDefault();
+    }
+}, {passive: false});
+
 canvas.addEventListener('touchend', (e) => {
-    e.preventDefault();
+    // 只有在結束轉珠拖曳時才阻擋預設行為
+    if (dragStart) {
+        e.preventDefault();
+    }
     let touch = e.changedTouches[0];
     canvas.dispatchEvent(new MouseEvent('mouseup', { clientX: touch.clientX, clientY: touch.clientY }));
 }, {passive: false});
