@@ -21,6 +21,7 @@
             height: auto;
             margin: 0 auto;
             display: block;
+            touch-action: pan-y;
         }
     </style>
 </head>
@@ -76,7 +77,7 @@ const ctx = canvas.getContext('2d');
 // 動態佈局初始化
 function initLayout() {
     let winW = window.innerWidth;
-    isMobileLayout = winW < 800;
+    isMobileLayout = winW < 500;
 
     if (isMobileLayout) {
         // 手機版：垂直排版
@@ -92,7 +93,7 @@ function initLayout() {
         UI_WIDTH = Math.min(winW, 500);
         
         SCREEN_WIDTH = UI_WIDTH;
-        SCREEN_HEIGHT = UI_Y + 380; // 預留空間給 UI
+        SCREEN_HEIGHT = UI_Y + 500; // 預留空間給 UI
 
         titlePos = { x: SCREEN_WIDTH / 2, y: 30 };
         
@@ -768,14 +769,18 @@ canvas.addEventListener('mouseup', async (e) => {
 
 // 手機觸控支援與滾動修正
 canvas.addEventListener('touchstart', (e) => {
-    // 計算點擊位置
+    if (isAnimating) return;
+
     const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
+    const mx = (e.touches[0].clientX - rect.left) * scaleX;
     const my = (e.touches[0].clientY - rect.top) * scaleY;
 
-    // 如果點擊在上方遊戲盤面區域，才阻止網頁預設滾動行為（避免轉珠時網頁跟著滑動）
-    if (typeof UI_Y !== 'undefined' && my < UI_Y) {
-        e.preventDefault();
+    // 只有在點擊「珠子盤面區域」時，才阻止網頁捲動 (e.preventDefault)
+    // 點擊下方的顏色選擇器、按鈕、或是空白處時，交給瀏覽器處理捲動
+    if (typeof UI_Y !== 'undefined' && my < UI_Y - 10) {
+        e.preventDefault(); 
     }
 
     let touch = e.touches[0];
