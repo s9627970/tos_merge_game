@@ -2,24 +2,26 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>神魔之塔合成煉成練習器 by YK</title>
     <style>
         body {
             background-color: #f5f5f5;
             font-family: 'Noto Sans TC', 'Microsoft JhengHei', sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
             margin: 0;
+            padding: 20px 0;
             user-select: none;
             touch-action: none;
+            text-align: center;
         }
         canvas {
             background-color: #f5f5f5;
             box-shadow: 0 4px 15px rgba(0,0,0,0.15);
             border-radius: 8px;
+            max-width: 100vw;
+            height: auto;
+            margin: 0 auto;
+            display: block;
         }
     </style>
 </head>
@@ -29,15 +31,15 @@
 
 <script>
 // ===========================
-// 基本設定
+// 基本設定 (改用 let 以支援動態排版)
 // ===========================
 const GRID_SIZE = 6;
-const CELL_SIZE = 80;
+let CELL_SIZE = 80;
 const MARGIN = 5;
-const BOARD_OFFSET_X = 20;
-const BOARD_OFFSET_Y = 45;
-const UI_WIDTH = 350;
-const UI_PADDING = 20;
+let BOARD_OFFSET_X = 20;
+let BOARD_OFFSET_Y = 45;
+let UI_WIDTH = 350;
+let UI_PADDING = 20;
 const MAX_LEVEL = 5;
 
 const COLOR_MAP = {
@@ -49,10 +51,7 @@ const COLOR_MAP = {
 };
 const COLOR_NAMES = Object.keys(COLOR_MAP);
 
-const board_right = BOARD_OFFSET_X + GRID_SIZE * (CELL_SIZE + MARGIN);
-const UI_X = board_right + UI_PADDING;
-const SCREEN_WIDTH = UI_X + UI_WIDTH + 20;
-const SCREEN_HEIGHT = 600;
+let board_right, UI_X, UI_Y, SCREEN_WIDTH, SCREEN_HEIGHT;
 
 // 全域狀態
 let spawnEnabled = true;
@@ -60,22 +59,107 @@ let customMode = false;
 let selectedColor = "水";
 let selectedLevel = 1;
 let isAnimating = false;
-let savedBoardState = null; // 儲存版面用
+let savedBoardState = null; 
 
 // 邊界常數
-const EDGE_MARGIN = Math.max(64, Math.floor(0.08 * SCREEN_WIDTH));
-const BOARD_PIXEL_WIDTH = GRID_SIZE * (CELL_SIZE + MARGIN) - MARGIN;
-const BOARD_LEFT_X = BOARD_OFFSET_X;
-const BOARD_RIGHT_X = BOARD_OFFSET_X + BOARD_PIXEL_WIDTH - 1;
+let EDGE_MARGIN, BOARD_PIXEL_WIDTH, BOARD_LEFT_X, BOARD_RIGHT_X;
+let LEFT_THRESHOLD, RIGHT_THRESHOLD, DOWN_THRESHOLD, DRAG_REMOVE_DISTANCE;
 
-const LEFT_THRESHOLD = BOARD_LEFT_X - EDGE_MARGIN;
-const RIGHT_THRESHOLD = BOARD_RIGHT_X + EDGE_MARGIN;
-const DOWN_THRESHOLD = BOARD_OFFSET_Y + GRID_SIZE * (CELL_SIZE + MARGIN) - MARGIN + EDGE_MARGIN;
-const DRAG_REMOVE_DISTANCE = Math.max(48, Math.floor(0.6 * CELL_SIZE));
+// UI 區域參數
+let customBtn, colorArea, levelArea, spawnBtn, saveBtn, loadBtn;
+let titlePos, colorTextPos, levelTextPos;
+let isMobileLayout = false;
+
+// 取得 Canvas (移到最前面以便 initLayout 使用)
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+// 動態佈局初始化
+function initLayout() {
+    let winW = window.innerWidth;
+    isMobileLayout = winW < 800;
+
+    if (isMobileLayout) {
+        // 手機版：垂直排版
+        BOARD_OFFSET_X = 10;
+        BOARD_OFFSET_Y = 60;
+        let availableWidth = Math.min(winW, 500) - (BOARD_OFFSET_X * 2);
+        CELL_SIZE = Math.floor(availableWidth / GRID_SIZE) - MARGIN;
+        
+        let board_bottom = BOARD_OFFSET_Y + GRID_SIZE * (CELL_SIZE + MARGIN);
+        
+        UI_X = 0;
+        UI_Y = board_bottom + 20;
+        UI_WIDTH = Math.min(winW, 500);
+        
+        SCREEN_WIDTH = UI_WIDTH;
+        SCREEN_HEIGHT = UI_Y + 380; // 預留空間給 UI
+
+        titlePos = { x: SCREEN_WIDTH / 2, y: 30 };
+        
+        customBtn = { x: 20, y: UI_Y + 10, w: 140, h: 40 };
+        colorTextPos = { x: 20, y: UI_Y + 80 };
+        
+        let spacing = Math.min(60, (SCREEN_WIDTH - 40) / COLOR_NAMES.length);
+        let size = Math.min(50, spacing - 5);
+        colorArea = { x: 20, y: UI_Y + 100, w: COLOR_NAMES.length * spacing, h: size, spacing: spacing, size: size };
+        
+        levelTextPos = { x: 20, y: UI_Y + 170 + (size - 50) };
+        let l_spacing = Math.min(60, (SCREEN_WIDTH - 40) / MAX_LEVEL);
+        let l_size = Math.min(50, l_spacing - 5);
+        levelArea = { x: 20, y: UI_Y + 190 + (size - 50), w: MAX_LEVEL * l_spacing, h: l_size, spacing: l_spacing, size: l_size };
+        
+        spawnBtn = { x: 20, y: UI_Y + 260 + (size - 50)*2, w: 120, h: 40 };
+        saveBtn = { x: 20, y: UI_Y + 315 + (size - 50)*2, w: 100, h: 40 };
+        loadBtn = { x: 140, y: UI_Y + 315 + (size - 50)*2, w: 100, h: 40 };
+
+    } else {
+        // 電腦版：水平排版
+        CELL_SIZE = 80;
+        BOARD_OFFSET_X = 20;
+        BOARD_OFFSET_Y = 45;
+        UI_WIDTH = 350;
+
+        board_right = BOARD_OFFSET_X + GRID_SIZE * (CELL_SIZE + MARGIN);
+        UI_X = board_right + UI_PADDING;
+        UI_Y = 0;
+        SCREEN_WIDTH = UI_X + UI_WIDTH + 20;
+        SCREEN_HEIGHT = 600;
+
+        titlePos = { x: UI_X + UI_WIDTH/2, y: 30 };
+        customBtn = { x: UI_X + 10, y: 60, w: 140, h: 40 };
+        
+        colorTextPos = { x: UI_X + 10, y: 120 };
+        colorArea = { x: UI_X + 10, y: 140, w: COLOR_NAMES.length * 60, h: 50, spacing: 60, size: 50 };
+        
+        levelTextPos = { x: UI_X + 10, y: 220 };
+        levelArea = { x: UI_X + 10, y: 240, w: MAX_LEVEL * 60, h: 50, spacing: 60, size: 50 };
+        
+        spawnBtn = { x: UI_X + 10, y: 320, w: 120, h: 40 };
+        saveBtn = { x: UI_X + 10, y: 380, w: 100, h: 40 };
+        loadBtn = { x: UI_X + 120, y: 380, w: 100, h: 40 };
+    }
+
+    // 重新計算邊界常數
+    EDGE_MARGIN = Math.max(64, Math.floor(0.08 * SCREEN_WIDTH));
+    BOARD_PIXEL_WIDTH = GRID_SIZE * (CELL_SIZE + MARGIN) - MARGIN;
+    BOARD_LEFT_X = BOARD_OFFSET_X;
+    BOARD_RIGHT_X = BOARD_OFFSET_X + BOARD_PIXEL_WIDTH - 1;
+
+    LEFT_THRESHOLD = BOARD_LEFT_X - EDGE_MARGIN;
+    RIGHT_THRESHOLD = BOARD_RIGHT_X + EDGE_MARGIN;
+    DOWN_THRESHOLD = BOARD_OFFSET_Y + GRID_SIZE * (CELL_SIZE + MARGIN) - MARGIN + EDGE_MARGIN;
+    DRAG_REMOVE_DISTANCE = Math.max(48, Math.floor(0.6 * CELL_SIZE));
+    
+    if(canvas) {
+        canvas.width = SCREEN_WIDTH;
+        canvas.height = SCREEN_HEIGHT;
+    }
+}
 
 // 動畫暫存區
 let removedTilesForAnimation = []; 
-let swapAnimationTiles = []; // 負責渲染正在交換的珠子
+let swapAnimationTiles = []; 
 
 // ===========================
 // 動畫曲線與輔助函式 (Easing)
@@ -123,21 +207,18 @@ class Tile {
         const radius = (CELL_SIZE / 2 - 5) * this.scale;
         
         if (radius > 0) {
-            // 畫本體
             ctx.beginPath();
             ctx.arc(cx, cy, radius, 0, Math.PI * 2);
             ctx.fillStyle = COLOR_MAP[this.color];
             ctx.fill();
             
-            // 畫高光增加立體感
             ctx.beginPath();
             ctx.arc(cx - radius*0.3, cy - radius*0.3, radius*0.3, 0, Math.PI * 2);
             ctx.fillStyle = "rgba(255, 255, 255, 0.3)";
             ctx.fill();
             
-            // 文字
             ctx.fillStyle = "#000000";
-            ctx.font = `bold ${26 * this.scale}px sans-serif`;
+            ctx.font = `bold ${Math.floor(CELL_SIZE * 0.325) * this.scale}px sans-serif`;
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
             ctx.fillText(this.level, cx, cy);
@@ -184,19 +265,16 @@ class Board {
                 const x = BOARD_OFFSET_X + j * (CELL_SIZE + MARGIN);
                 const y = BOARD_OFFSET_Y + i * (CELL_SIZE + MARGIN);
                 
-                // 底色格子
                 ctx.fillStyle = "#E6E6E6";
                 ctx.fillRect(x, y, CELL_SIZE, CELL_SIZE);
                 
                 const tile = this.grid[i][j];
-                // 如果該珠子正在參與交換動畫，則不在此處繪製
                 const isSwapping = swapAnimationTiles.some(t => t.i === i && t.j === j);
                 
                 if (tile && !isSwapping) {
                     tile.draw(ctx, x, y);
                 }
                 
-                // 選中框線
                 if (this.selected && this.selected.i === i && this.selected.j === j) {
                     ctx.strokeStyle = "rgba(0,0,0,0.6)";
                     ctx.lineWidth = 4;
@@ -207,18 +285,15 @@ class Board {
         }
     }
 
-    // 動畫交換處理
     async animatedSwap(pos1, pos2) {
         let t1 = this.grid[pos1.i][pos1.j];
         let t2 = this.grid[pos2.i][pos2.j];
         
         if (!t1 && !t2) return;
 
-        // 計算實際像素距離
         let dx = (pos2.j - pos1.j) * (CELL_SIZE + MARGIN);
         let dy = (pos2.i - pos1.i) * (CELL_SIZE + MARGIN);
 
-        // 將參與交換的珠子抽離至獨立渲染層
         if(t1) swapAnimationTiles.push({i: pos1.i, j: pos1.j, tile: t1, startX: 0, startY: 0, endX: dx, endY: dy});
         if(t2) swapAnimationTiles.push({i: pos2.i, j: pos2.j, tile: t2, startX: 0, startY: 0, endX: -dx, endY: -dy});
 
@@ -229,10 +304,9 @@ class Board {
                 item.tile.x_offset = item.startX + (item.endX - item.startX) * progress;
                 item.tile.y_offset = item.startY + (item.endY - item.startY) * progress;
             });
-            await sleep(16); // 約 60fps
+            await sleep(16); 
         }
 
-        // 交換陣列資料並復原 offset
         let temp = this.grid[pos1.i][pos1.j];
         this.grid[pos1.i][pos1.j] = this.grid[pos2.i][pos2.j];
         this.grid[pos2.i][pos2.j] = temp;
@@ -245,7 +319,6 @@ class Board {
 
     findMatches() {
         let matches = [];
-        // 橫向
         for (let i = 0; i < GRID_SIZE; i++) {
             let runColor = null, runLevel = null, runStart = 0, runLen = 0;
             for (let j = 0; j < GRID_SIZE; j++) {
@@ -264,7 +337,6 @@ class Board {
             if (runLen >= 3) matches.push(["row", i, runStart, runLen, runColor, runLevel]);
         }
 
-        // 直向
         for (let j = 0; j < GRID_SIZE; j++) {
             let runColor = null, runLevel = null, runStart = 0, runLen = 0;
             for (let i = 0; i < GRID_SIZE; i++) {
@@ -306,7 +378,6 @@ class Board {
                     let baseLvl = current ? current.level : level;
                     let newLvl = isMaxLevel ? baseLvl : Math.min(MAX_LEVEL, baseLvl + 1);
                     this.grid[fixed][jj] = new Tile(color, newLvl);
-                    // 升級動畫：從 0 彈出
                     this.grid[fixed][jj].scale = 0;
                 }
             } else {
@@ -322,7 +393,6 @@ class Board {
             }
         }
 
-        // 收集消除珠子
         removedTilesForAnimation = [];
         let upgradeTiles = [];
         for (let i = 0; i < GRID_SIZE; i++) {
@@ -337,28 +407,26 @@ class Board {
             }
         }
 
-        // 消除動畫 (Pop & Fade out)
         const animSteps = 15;
         for (let step = 1; step <= animSteps; step++) {
             let t = step / animSteps;
             removedTilesForAnimation.forEach(rt => {
                 if (t < 0.3) {
-                    rt.tile.scale = 1 + easeOutQuad(t / 0.3) * 0.2; // 稍微放大
+                    rt.tile.scale = 1 + easeOutQuad(t / 0.3) * 0.2; 
                 } else {
                     let shrinkT = (t - 0.3) / 0.7;
-                    rt.tile.scale = 1.2 - easeInQuad(shrinkT) * 1.2; // 縮小到0
-                    rt.tile.alpha = 1 - shrinkT; // 淡出
+                    rt.tile.scale = 1.2 - easeInQuad(shrinkT) * 1.2; 
+                    rt.tile.alpha = 1 - shrinkT; 
                 }
             });
             upgradeTiles.forEach(ut => {
-                ut.scale = Math.min(1, easeOutBack(t)); // 升級珠子彈出
+                ut.scale = Math.min(1, easeOutBack(t)); 
             });
             await sleep(16);
         }
         removedTilesForAnimation = [];
         upgradeTiles.forEach(ut => ut.scale = 1);
 
-        // 處理掉落 (計算物理距離)
         let fallingTiles = [];
         for (let j = 0; j < GRID_SIZE; j++) {
             let stack = [];
@@ -369,7 +437,6 @@ class Board {
             for (let i = GRID_SIZE - 1; i >= 0; i--) {
                 if (stack.length > 0) {
                     let tile = stack.shift();
-                    // 計算目前物理上在陣列中的哪個位置(y_offset)
                     let currentRealY = this.grid.findIndex(row => row[j] === tile); 
                     if(currentRealY !== -1 && currentRealY !== i) {
                         tile.y_offset -= (i - currentRealY) * (CELL_SIZE + MARGIN);
@@ -379,7 +446,7 @@ class Board {
                 } else {
                     if (spawnEnabled) {
                         let nt = this.randomTile();
-                        nt.y_offset = -(i + 1) * (CELL_SIZE + MARGIN); // 從畫面頂部外生成
+                        nt.y_offset = -(i + 1) * (CELL_SIZE + MARGIN); 
                         this.grid[i][j] = nt;
                         fallingTiles.push(nt);
                     } else {
@@ -389,10 +456,8 @@ class Board {
             }
         }
 
-        // 掉落動畫 (Bounce)
         if (fallingTiles.length > 0) {
             const dropSteps = 24;
-            // 記錄起始位置
             fallingTiles.forEach(t => t.startY = t.y_offset);
             
             for (let s = 1; s <= dropSteps; s++) {
@@ -405,7 +470,6 @@ class Board {
             fallingTiles.forEach(t => t.y_offset = 0);
         }
 
-        // 連鎖
         let newMatches = this.findMatches();
         if (newMatches.length > 0) {
             await sleep(150);
@@ -420,7 +484,6 @@ class Board {
         let removedTile = this.grid[ri][rj];
         this.grid[ri][rj] = null;
 
-        // 單顆消失動畫
         removedTilesForAnimation = [{ i: ri, j: rj, tile: removedTile }];
         const steps = 15;
         for (let step = 1; step <= steps; step++) {
@@ -431,7 +494,6 @@ class Board {
         }
         removedTilesForAnimation = [];
 
-        // 單行掉落
         let j = rj;
         let stack = [];
         let fallingTiles = [];
@@ -480,24 +542,18 @@ class Board {
     }
 }
 
+// 系統初始化
+initLayout();
+let board = new Board();
+
+// 監聽視窗大小變化以重新排版
+window.addEventListener('resize', () => {
+    initLayout();
+});
+
 // ===========================
 // 畫布與全域繪圖
 // ===========================
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
-canvas.width = SCREEN_WIDTH;
-canvas.height = SCREEN_HEIGHT;
-
-let board = new Board();
-
-// UI 區域參數
-const customBtn = { x: UI_X + 10, y: 60, w: 140, h: 40 };
-const colorArea = { x: UI_X + 10, y: 140, w: COLOR_NAMES.length * 60, h: 50 };
-const levelArea = { x: UI_X + 10, y: 240, w: MAX_LEVEL * 60, h: 50 };
-const spawnBtn = { x: UI_X + 10, y: 320, w: 120, h: 40 };
-const saveBtn = { x: UI_X + 10, y: 380, w: 100, h: 40 };
-const loadBtn = { x: UI_X + 120, y: 380, w: 100, h: 40 };
-
 function drawRect(x, y, w, h, color, outline=false, radius=5) {
     ctx.fillStyle = color;
     ctx.beginPath();
@@ -520,52 +576,53 @@ function drawText(text, x, y, size=18, color="#000", align="left") {
 }
 
 function renderLoop() {
-    // 背景
     ctx.fillStyle = "#F5F5F5";
     ctx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
     
     board.draw(ctx);
 
-    // 繪製交換中的珠子 (在上層)
     for (let st of swapAnimationTiles) {
         const x = BOARD_OFFSET_X + st.j * (CELL_SIZE + MARGIN);
         const y = BOARD_OFFSET_Y + st.i * (CELL_SIZE + MARGIN);
         st.tile.draw(ctx, x, y);
     }
 
-    // 繪製動畫中的消失珠子
     for (let rt of removedTilesForAnimation) {
         const x = BOARD_OFFSET_X + rt.j * (CELL_SIZE + MARGIN);
         const y = BOARD_OFFSET_Y + rt.i * (CELL_SIZE + MARGIN);
         rt.tile.draw(ctx, x, y);
     }
 
-    // 右側 UI
+    // UI 背景
     ctx.fillStyle = "#DCDCDC";
-    ctx.fillRect(UI_X, 0, UI_WIDTH, SCREEN_HEIGHT);
+    if (isMobileLayout) {
+        ctx.fillRect(0, UI_Y - 10, SCREEN_WIDTH, SCREEN_HEIGHT - UI_Y + 10);
+    } else {
+        ctx.fillRect(UI_X, 0, UI_WIDTH, SCREEN_HEIGHT);
+    }
 
     // 自訂按鈕
     drawRect(customBtn.x, customBtn.y, customBtn.w, customBtn.h, customMode ? "#A0C8A0" : "#C8C8C8");
     drawText(`自訂模式: ${customMode ? "ON" : "OFF"}`, customBtn.x + customBtn.w/2, customBtn.y + customBtn.h/2, 16, "#000", "center");
 
     // 標題說明
-    drawText("點擊按鈕切換自訂版面", UI_X + UI_WIDTH/2, 30, 18, "#333", "center");
+    drawText("點擊按鈕切換自訂版面", titlePos.x, titlePos.y, 18, "#333", "center");
 
     // 顏色選擇
-    drawText("選擇顏色:", UI_X + 10, 120);
+    drawText("選擇顏色:", colorTextPos.x, colorTextPos.y);
     COLOR_NAMES.forEach((color, idx) => {
-        let x = UI_X + 10 + idx * 60;
-        let y = 140;
-        drawRect(x, y, 50, 50, COLOR_MAP[color], selectedColor === color, 25); // 畫成圓形按鈕
+        let x = colorArea.x + idx * colorArea.spacing;
+        let y = colorArea.y;
+        drawRect(x, y, colorArea.size, colorArea.size, COLOR_MAP[color], selectedColor === color, colorArea.size/2);
     });
 
     // 等級選擇
-    drawText("選擇等級:", UI_X + 10, 220);
+    drawText("選擇等級:", levelTextPos.x, levelTextPos.y);
     for (let lvl = 1; lvl <= MAX_LEVEL; lvl++) {
-        let x = UI_X + 10 + (lvl - 1) * 60;
-        let y = 240;
-        drawRect(x, y, 50, 50, "#C8C8C8", selectedLevel === lvl);
-        drawText(lvl.toString(), x + 25, y + 25, 24, "#000", "center");
+        let x = levelArea.x + (lvl - 1) * levelArea.spacing;
+        let y = levelArea.y;
+        drawRect(x, y, levelArea.size, levelArea.size, "#C8C8C8", selectedLevel === lvl);
+        drawText(lvl.toString(), x + levelArea.size/2, y + levelArea.size/2, Math.floor(levelArea.size*0.5), "#000", "center");
     }
 
     // 天降開關
@@ -582,7 +639,6 @@ function renderLoop() {
     requestAnimationFrame(renderLoop);
 }
 
-// 啟動繪圖迴圈
 requestAnimationFrame(renderLoop);
 
 // ===========================
@@ -618,11 +674,13 @@ let dragStartPixel = null;
 canvas.addEventListener('mousedown', (e) => {
     if (isAnimating) return;
 
+    // 將真實點擊座標對應到縮放後的 Canvas 座標
     const rect = canvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const mx = (e.clientX - rect.left) * scaleX;
+    const my = (e.clientY - rect.top) * scaleY;
 
-    // 檢查 UI 點擊
     if (mx >= customBtn.x && mx <= customBtn.x + customBtn.w && my >= customBtn.y && my <= customBtn.y + customBtn.h) {
         customMode = !customMode; return;
     }
@@ -636,18 +694,17 @@ canvas.addEventListener('mousedown', (e) => {
         loadBoard(); return;
     }
 
-    if (mx >= colorArea.x && mx <= colorArea.x + colorArea.w && my >= colorArea.y && my <= colorArea.y + colorArea.h) {
-        let idx = Math.floor((mx - colorArea.x) / 60);
+    if (my >= colorArea.y && my <= colorArea.y + colorArea.h && mx >= colorArea.x && mx <= colorArea.x + colorArea.w) {
+        let idx = Math.floor((mx - colorArea.x) / colorArea.spacing);
         if (idx >= 0 && idx < COLOR_NAMES.length) selectedColor = COLOR_NAMES[idx];
         return;
     }
-    if (mx >= levelArea.x && mx <= levelArea.x + levelArea.w && my >= levelArea.y && my <= levelArea.y + levelArea.h) {
-        let idx = Math.floor((mx - levelArea.x) / 60);
+    if (my >= levelArea.y && my <= levelArea.y + levelArea.h && mx >= levelArea.x && mx <= levelArea.x + levelArea.w) {
+        let idx = Math.floor((mx - levelArea.x) / levelArea.spacing);
         if (idx >= 0 && idx < MAX_LEVEL) selectedLevel = idx + 1;
         return;
     }
 
-    // 檢查盤面點擊
     let pos = getCellFromMouse(mx, my);
     if (pos) {
         dragStart = pos;
@@ -668,17 +725,19 @@ canvas.addEventListener('mouseup', async (e) => {
     }
 
     const rect = canvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const mx = (e.clientX - rect.left) * scaleX;
+    const my = (e.clientY - rect.top) * scaleY;
+    
     const endCell = getCellFromMouse(mx, my);
 
     isAnimating = true; 
     let { i: si, j: sj } = dragStart;
 
     if (endCell && !customMode) {
-        // 放開在有效格子，判斷是否相鄰
         if (Math.abs(si - endCell.i) + Math.abs(sj - endCell.j) === 1) {
-            await board.animatedSwap(dragStart, endCell); // 播放滑順交換動畫
+            await board.animatedSwap(dragStart, endCell); 
             
             while (true) {
                 let matches = board.findMatches();
@@ -690,7 +749,6 @@ canvas.addEventListener('mouseup', async (e) => {
             }
         }
     } else if (!endCell && !customMode) {
-        // 拖出邊界刪除邏輯
         let dx = mx - dragStartPixel.x;
         let dy = my - dragStartPixel.y;
 
@@ -709,7 +767,6 @@ canvas.addEventListener('mouseup', async (e) => {
     isAnimating = false; 
 });
 
-// 手機觸控支援
 canvas.addEventListener('touchstart', (e) => {
     e.preventDefault();
     let touch = e.touches[0];
