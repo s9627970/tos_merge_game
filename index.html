@@ -718,13 +718,18 @@ canvas.addEventListener('mousedown', (e) => {
     }
 });
 
-canvas.addEventListener('mouseup', async (e) => {
+// ===========================
+// 優化：將滑鼠與觸控的放開事件綁定至 window，確保拉出邊界也能正確判定
+// ===========================
+
+window.addEventListener('mouseup', async (e) => {
     if (isAnimating || !dragStart) {
         dragStart = null;
         if(board) board.selected = null;
         return;
     }
 
+    // 即使在 canvas 外放開，也能透過 getBoundingClientRect 算出正確的相對偏移量
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
@@ -767,6 +772,55 @@ canvas.addEventListener('mouseup', async (e) => {
     dragStartPixel = null;
     isAnimating = false; 
 });
+
+// 手機觸控支援與滾動修正 (touchstart 保持綁定在 canvas)
+canvas.addEventListener('touchstart', (e) => {
+    if (isAnimating) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const mx = (e.touches[0].clientX - rect.left) * scaleX;
+    const my = (e.touches[0].clientY - rect.top) * scaleY;
+
+    if (typeof UI_Y !== 'undefined' && my < UI_Y - 10) {
+        e.preventDefault(); 
+    }
+
+    let touch = e.touches[0];
+    canvas.dispatchEvent(new MouseEvent('mousedown', { clientX: touch.clientX, clientY: touch.clientY }));
+}, {passive: false});
+
+canvas.addEventListener('touchmove', (e) => {
+    if (dragStart) {
+        e.preventDefault();
+    }
+}, {passive: false});
+
+// touchend 改綁定在 window，防止手指滑出 Canvas 範圍
+window.addEventListener('touchend', (e) => {
+    if (dragStart) {
+        if (e.cancelable) e.preventDefault();
+        let touch = e.changedTouches[0];
+        canvas.dispatchEvent(new MouseEvent('mouseup', { 
+            clientX: touch.clientX, 
+            clientY: touch.clientY,
+            bubbles: true // 關鍵修正：允許事件向上冒泡給 window 捕捉
+        }));
+    }
+}, {passive: false});
+
+// 新增：處理手指滑出實體螢幕邊緣（被系統中斷）的情況
+window.addEventListener('touchcancel', (e) => {
+    if (dragStart) {
+        let touch = e.changedTouches[0];
+        canvas.dispatchEvent(new MouseEvent('mouseup', { 
+            clientX: touch.clientX, 
+            clientY: touch.clientY,
+            bubbles: true 
+        }));
+    }
+}, {passive: false});
 
 // 手機觸控支援與滾動修正
 canvas.addEventListener('touchstart', (e) => {
