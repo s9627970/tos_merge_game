@@ -361,6 +361,7 @@ class Board {
         if (!matches || matches.length === 0) return false;
         
         let cleared = Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill(false));
+        let upgraded = Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill(false)); // 新增：記錄已被標記為升級的位置
 
         for (let m of matches) {
             let [direction, fixed, start, length, color, level] = m;
@@ -369,26 +370,25 @@ class Board {
             let isMaxLevel = (level >= MAX_LEVEL);
             let midStart = start + 1;
             let midEnd = start + length - 2;
+            
+            // 修正：統一使用該組連線的原始 level 來計算新等級，防止交集點意外連升兩級
+            let newLvl = isMaxLevel ? level : Math.min(MAX_LEVEL, level + 1); 
 
             if (direction === "row") {
                 cleared[fixed][start] = true;
                 cleared[fixed][start + length - 1] = true;
                 for (let jj = midStart; jj <= midEnd; jj++) {
-                    let current = this.grid[fixed][jj];
-                    let baseLvl = current ? current.level : level;
-                    let newLvl = isMaxLevel ? baseLvl : Math.min(MAX_LEVEL, baseLvl + 1);
                     this.grid[fixed][jj] = new Tile(color, newLvl);
                     this.grid[fixed][jj].scale = 0;
+                    upgraded[fixed][jj] = true; // 標記為升級
                 }
             } else {
                 cleared[start][fixed] = true;
                 cleared[start + length - 1][fixed] = true;
                 for (let ii = midStart; ii <= midEnd; ii++) {
-                    let current = this.grid[ii][fixed];
-                    let baseLvl = current ? current.level : level;
-                    let newLvl = isMaxLevel ? baseLvl : Math.min(MAX_LEVEL, baseLvl + 1);
                     this.grid[ii][fixed] = new Tile(color, newLvl);
                     this.grid[ii][fixed].scale = 0;
+                    upgraded[ii][fixed] = true; // 標記為升級
                 }
             }
         }
@@ -397,7 +397,8 @@ class Board {
         let upgradeTiles = [];
         for (let i = 0; i < GRID_SIZE; i++) {
             for (let j = 0; j < GRID_SIZE; j++) {
-                if (cleared[i][j] && this.grid[i][j]) {
+                // 修正重點：如果該位置被標記為消除，但「沒有」被標記為升級，才將其移除
+                if (cleared[i][j] && !upgraded[i][j] && this.grid[i][j]) {
                     removedTilesForAnimation.push({ i, j, tile: this.grid[i][j] });
                     this.grid[i][j] = null;
                 }
