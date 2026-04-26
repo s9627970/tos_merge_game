@@ -43,11 +43,11 @@ let UI_PADDING = 20;
 const MAX_LEVEL = 5;
 
 const COLOR_MAP = {
-    "水": "#50b4ff",
-    "火": "#ff6464",
-    "木": "#64dc78",
-    "土": "#ffc850",
-    "雷": "#b478ff"
+    "水": "#56B4E9", // 天藍色 (Sky Blue)：維持水的視覺直覺，明度較高。
+    "火": "#D55E00", // 朱紅色 (Vermilion)：偏橘的深紅色，在色盲眼中明度較暗，能有效與綠色錯開。
+    "木": "#009E73", // 藍綠色 (Bluish Green)：加入一點藍色調的深綠色，與朱紅色的對比非常強烈。
+    "土": "#F0E442", // 明黃色 (Yellow)：擁有極高的明度，任何類型的色覺障礙都能一眼認出。
+    "雷": "#CC79A7"  // 紫紅色 (Reddish Purple)：取代原本的純紫色，調整了紅藍比例，避免與天藍色混淆。
 };
 const COLOR_NAMES = Object.keys(COLOR_MAP);
 
