@@ -51,6 +51,31 @@ const COLOR_MAP = {
 };
 const COLOR_NAMES = Object.keys(COLOR_MAP);
 
+// ===========================
+// 圖片載入系統
+// ===========================
+const IMAGE_PREFIX = {
+    "水": "w",
+    "火": "f",
+    "木": "g",
+    "土": "l",
+    "雷": "d"
+};
+
+const tileImages = {};
+let imagesLoadedCount = 0;
+const totalImages = 25; // 5種屬性 * 5個等級
+
+// 預先載入所有圖片，存入 tileImages 物件中
+for (const [color, prefix] of Object.entries(IMAGE_PREFIX)) {
+    for (let lvl = 1; lvl <= MAX_LEVEL; lvl++) {
+        const img = new Image();
+        img.src = `${prefix}_${lvl}.png`; // 讀取你設定的圖片路徑
+        img.onload = () => { imagesLoadedCount++; };
+        tileImages[`${prefix}_${lvl}`] = img;
+    }
+}
+
 let board_right, UI_X, UI_Y, SCREEN_WIDTH, SCREEN_HEIGHT;
 
 // 全域狀態
@@ -204,24 +229,32 @@ class Tile {
         
         const cx = x + CELL_SIZE / 2 + this.x_offset;
         const cy = y + CELL_SIZE / 2 + this.y_offset;
-        const radius = (CELL_SIZE / 2 - 5) * this.scale;
         
-        if (radius > 0) {
-            ctx.beginPath();
-            ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-            ctx.fillStyle = COLOR_MAP[this.color];
-            ctx.fill();
-            
-            ctx.beginPath();
-            ctx.arc(cx - radius*0.3, cy - radius*0.3, radius*0.3, 0, Math.PI * 2);
-            ctx.fillStyle = "rgba(255, 255, 255, 0.3)";
-            ctx.fill();
-            
-            ctx.fillStyle = "#000000";
-            ctx.font = `bold ${Math.floor(CELL_SIZE * 0.325) * this.scale}px sans-serif`;
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            ctx.fillText(this.level, cx, cy);
+        // 設定圖片的繪製尺寸 (扣掉一點邊距)
+        const size = (CELL_SIZE - 5) * this.scale;
+        
+        const prefix = IMAGE_PREFIX[this.color];
+        const img = tileImages[`${prefix}_${this.level}`];
+
+        if (size > 0) {
+            // 確認圖片已經成功載入且可用
+            if (img && img.complete && img.naturalWidth > 0) {
+                // 將圖片置中繪製
+                ctx.drawImage(img, cx - size / 2, cy - size / 2, size, size);
+            } else {
+                // Fallback：如果圖片還沒載入好，先畫原本的圓形跟數字頂著
+                const radius = size / 2;
+                ctx.beginPath();
+                ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+                ctx.fillStyle = COLOR_MAP[this.color];
+                ctx.fill();
+                
+                ctx.fillStyle = "#000000";
+                ctx.font = `bold ${Math.floor(CELL_SIZE * 0.325) * this.scale}px sans-serif`;
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText(this.level, cx, cy);
+            }
         }
         ctx.restore();
     }
@@ -265,7 +298,7 @@ class Board {
                 const x = BOARD_OFFSET_X + j * (CELL_SIZE + MARGIN);
                 const y = BOARD_OFFSET_Y + i * (CELL_SIZE + MARGIN);
                 
-                ctx.fillStyle = "#E6E6E6";
+                ctx.fillStyle = "#38322D";
                 ctx.fillRect(x, y, CELL_SIZE, CELL_SIZE);
                 
                 const tile = this.grid[i][j];
@@ -577,7 +610,7 @@ function drawText(text, x, y, size=18, color="#000", align="left") {
 }
 
 function renderLoop() {
-    ctx.fillStyle = "#F5F5F5";
+    ctx.fillStyle = "#2B2622";
     ctx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
     
     board.draw(ctx);
@@ -614,7 +647,17 @@ function renderLoop() {
     COLOR_NAMES.forEach((color, idx) => {
         let x = colorArea.x + idx * colorArea.spacing;
         let y = colorArea.y;
+        
+        // 畫底框
         drawRect(x, y, colorArea.size, colorArea.size, COLOR_MAP[color], selectedColor === color, colorArea.size/2);
+
+        // 畫上 1 級的圖片當作預覽圖
+        const prefix = IMAGE_PREFIX[color];
+        const img = tileImages[`${prefix}_1`];
+        if (img && img.complete && img.naturalWidth > 0) {
+            const imgSize = colorArea.size * 0.8;
+            ctx.drawImage(img, x + (colorArea.size - imgSize)/2, y + (colorArea.size - imgSize)/2, imgSize, imgSize);
+        }
     });
 
     // 等級選擇
