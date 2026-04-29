@@ -772,41 +772,57 @@ window.addEventListener('mouseup', async (e) => {
         return;
     }
 
-    // 即使在 canvas 外放開，也能透過 getBoundingClientRect 算出正確的相對偏移量
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
     const mx = (e.clientX - rect.left) * scaleX;
     const my = (e.clientY - rect.top) * scaleY;
     
-    const endCell = getCellFromMouse(mx, my);
-
     isAnimating = true; 
     let { i: si, j: sj } = dragStart;
 
-    if (endCell && !customMode) {
-        if (Math.abs(si - endCell.i) + Math.abs(sj - endCell.j) === 1) {
-            await board.animatedSwap(dragStart, endCell); 
-            
-            while (true) {
-                let matches = board.findMatches();
-                if (matches.length > 0) {
-                    await board.applyMatches(matches);
-                } else {
-                    break;
+    if (!customMode) {
+        // 計算位移向量與距離
+        const dx = mx - dragStartPixel.x;
+        const dy = my - dragStartPixel.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const swipeThreshold = CELL_SIZE * 0.4; // 滑動門檻：位移超過格子的 40%
+
+        if (dist > swipeThreshold) {
+            let ti = si;
+            let tj = sj;
+
+            // 根據 dx, dy 的比例判斷滑動的主方向
+            if (Math.abs(dx) > Math.abs(dy)) {
+                tj = sj + (dx > 0 ? 1 : -1); // 左右滑動
+            } else {
+                ti = si + (dy > 0 ? 1 : -1); // 上下滑動
+            }
+
+            // 檢查目標位置是否在棋盤內
+            if (ti >= 0 && ti < GRID_SIZE && tj >= 0 && tj < GRID_SIZE) {
+                // 在棋盤內：執行相鄰交換
+                const targetCell = { i: ti, j: tj };
+                await board.animatedSwap(dragStart, targetCell); 
+                
+                while (true) {
+                    let matches = board.findMatches();
+                    if (matches.length > 0) {
+                        await board.applyMatches(matches);
+                    } else {
+                        break;
+                    }
+                }
+            } else {
+                // 在棋盤外：執行原本的邊界移除邏輯
+                if (sj === 0 && (mx < LEFT_THRESHOLD || dx < -DRAG_REMOVE_DISTANCE)) {
+                    await board.removeAndCollapse(si, sj);
+                } else if (sj === GRID_SIZE - 1 && (mx > RIGHT_THRESHOLD || dx > DRAG_REMOVE_DISTANCE)) {
+                    await board.removeAndCollapse(si, sj);
+                } else if (si === GRID_SIZE - 1 && (my > DOWN_THRESHOLD || dy > DRAG_REMOVE_DISTANCE)) {
+                    await board.removeAndCollapse(si, sj);
                 }
             }
-        }
-    } else if (!endCell && !customMode) {
-        let dx = mx - dragStartPixel.x;
-        let dy = my - dragStartPixel.y;
-
-        if (sj === 0 && (mx < LEFT_THRESHOLD || dx < -DRAG_REMOVE_DISTANCE)) {
-            await board.removeAndCollapse(si, sj);
-        } else if (sj === GRID_SIZE - 1 && (mx > RIGHT_THRESHOLD || dx > DRAG_REMOVE_DISTANCE)) {
-            await board.removeAndCollapse(si, sj);
-        } else if (si === GRID_SIZE - 1 && (my > DOWN_THRESHOLD || dy > DRAG_REMOVE_DISTANCE)) {
-            await board.removeAndCollapse(si, sj);
         }
     }
 
