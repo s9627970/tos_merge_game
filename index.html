@@ -85,13 +85,14 @@ let selectedColor = "水";
 let selectedLevel = 1;
 let isAnimating = false;
 let savedBoardState = null; 
+let movesCount = 0;
 
 // 邊界常數
 let EDGE_MARGIN, BOARD_PIXEL_WIDTH, BOARD_LEFT_X, BOARD_RIGHT_X;
 let LEFT_THRESHOLD, RIGHT_THRESHOLD, DOWN_THRESHOLD, DRAG_REMOVE_DISTANCE;
 
 // UI 區域參數
-let customBtn, colorArea, levelArea, spawnBtn, saveBtn, loadBtn;
+let customBtn, resetMovesBtn, colorArea, levelArea, spawnBtn, saveBtn, loadBtn;
 let titlePos, colorTextPos, levelTextPos;
 let isMobileLayout = false;
 
@@ -123,6 +124,9 @@ function initLayout() {
         titlePos = { x: SCREEN_WIDTH / 2, y: 30 };
         
         customBtn = { x: 20, y: UI_Y + 10, w: 140, h: 40 };
+
+        resetMovesBtn = { x: 170, y: UI_Y + 10, w: 130, h: 40 };
+
         colorTextPos = { x: 20, y: UI_Y + 80 };
         
         let spacing = Math.min(60, (SCREEN_WIDTH - 40) / COLOR_NAMES.length);
@@ -153,6 +157,8 @@ function initLayout() {
 
         titlePos = { x: UI_X + UI_WIDTH/2, y: 30 };
         customBtn = { x: UI_X + 10, y: 60, w: 140, h: 40 };
+
+        resetMovesBtn = { x: UI_X + 160, y: 60, w: 130, h: 40 };
         
         colorTextPos = { x: UI_X + 10, y: 120 };
         colorArea = { x: UI_X + 10, y: 140, w: COLOR_NAMES.length * 60, h: 50, spacing: 60, size: 50 };
@@ -639,6 +645,10 @@ function renderLoop() {
     drawRect(customBtn.x, customBtn.y, customBtn.w, customBtn.h, customMode ? "#A0C8A0" : "#C8C8C8");
     drawText(`自訂模式: ${customMode ? "ON" : "OFF"}`, customBtn.x + customBtn.w/2, customBtn.y + customBtn.h/2, 16, "#000", "center");
 
+    // 新增：步數重置按鈕
+    drawRect(resetMovesBtn.x, resetMovesBtn.y, resetMovesBtn.w, resetMovesBtn.h, "#FFE4B5"); // 使用米黃色作區分
+    drawText(`步數: ${movesCount} (重置)`, resetMovesBtn.x + resetMovesBtn.w/2, resetMovesBtn.y + resetMovesBtn.h/2, 15, "#000", "center");
+
     // 標題說明
     drawText("點擊按鈕切換自訂版面", titlePos.x, titlePos.y, 18, "#333", "center");
 
@@ -728,6 +738,10 @@ canvas.addEventListener('mousedown', (e) => {
     if (mx >= customBtn.x && mx <= customBtn.x + customBtn.w && my >= customBtn.y && my <= customBtn.y + customBtn.h) {
         customMode = !customMode; return;
     }
+    // 新增：點擊重置步數
+    if (mx >= resetMovesBtn.x && mx <= resetMovesBtn.x + resetMovesBtn.w && my >= resetMovesBtn.y && my <= resetMovesBtn.y + resetMovesBtn.h) {
+        movesCount = 0; return;
+    }
     if (mx >= spawnBtn.x && mx <= spawnBtn.x + spawnBtn.w && my >= spawnBtn.y && my <= spawnBtn.y + spawnBtn.h) {
         spawnEnabled = !spawnEnabled; return;
     }
@@ -789,6 +803,8 @@ window.addEventListener('mouseup', async (e) => {
         const swipeThreshold = CELL_SIZE * 0.4; // 滑動門檻：位移超過格子的 40%
 
         if (dist > swipeThreshold) {
+            movesCount++;
+            
             let ti = si;
             let tj = sj;
 
